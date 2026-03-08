@@ -1,0 +1,100 @@
+name: "Phare.io Incident Action"
+description: "Create and manage Phare.io incidents from GitHub Actions workflows."
+author: "Roman Chutchev"
+
+inputs:
+  phare-token:
+    description: "Phare.io API token (use GitHub Secrets to pass this value)."
+    required: true
+  project-id:
+    description: "Optional Phare project id to send as X-Phare-Project-Id."
+    required: false
+  project-slug:
+    description: "Optional Phare project slug to send as X-Phare-Project-Slug."
+    required: false
+  impact:
+    description: "Incident impact. One of: unknown, operational, degraded_performance, partial_outage, major_outage, maintenance. Defaults to maintenance."
+    required: false
+    default: "maintenance"
+  title:
+    description: "Incident title. Optional for create; a maintenance placeholder will be used if omitted."
+    required: false
+  description:
+    description: "Incident description. Optional for create; a maintenance placeholder will be used if omitted."
+    required: false
+  exclude-from-downtime:
+    description: "Whether to exclude this incident from downtime calculations (true/false)."
+    required: false
+  monitors:
+    description: 'Comma-separated list of monitor IDs, for example: "1,2,3".'
+    required: false
+  incident-at:
+    description: "Incident confirmation time. Either ISO 8601 (e.g. 2026-03-08T12:00:00Z) or an offset like 10s, 10m, 1h, 10h, 1d."
+    required: false
+  recovery-at:
+    description: "Incident recovery time. Either ISO 8601 (e.g. 2026-03-08T12:10:00Z) or an offset like 10s, 10m, 1h, 10h, 1d."
+    required: false
+  incident-id:
+    description: "Incident ID to update, recover, or delete. Required for operations 'update', 'recover', and 'delete'."
+    required: false
+  operation:
+    description: "Operation to perform: `create`, `update`, `recover`, or `delete`."
+    required: false
+    default: "create"
+  incident-artifact-name:
+    description: "GitHub Actions artifact name for the created incident payload."
+    required: false
+    default: "phare-incident"
+
+outputs:
+  incident-id:
+    description: "ID of the incident affected by the operation (created, updated, or recovered)."
+    value: ${{ steps.incident.outputs.incident_id }}
+  incident-artifact-path:
+    description: "Path of the JSON file containing the created incident payload."
+    value: "phare-incident.json"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    - name: Install incident-api helper
+      shell: bash
+      run: |
+        python -m pip install --upgrade pip
+        pip install .
+
+    - name: Run Phare.io incident operation
+      id: incident
+      shell: bash
+      env:
+        PHARE_TOKEN: ${{ inputs.phare-token }}
+        PHARE_PROJECT_ID: ${{ inputs.project-id }}
+        PHARE_PROJECT_SLUG: ${{ inputs.project-slug }}
+        PHARE_IMPACT: ${{ inputs.impact }}
+        PHARE_TITLE: ${{ inputs.title }}
+        PHARE_DESCRIPTION: ${{ inputs.description }}
+        PHARE_EXCLUDE_FROM_DOWNTIME: ${{ inputs.exclude-from-downtime }}
+        PHARE_MONITORS: ${{ inputs.monitors }}
+        PHARE_INCIDENT_AT: ${{ inputs.incident-at }}
+        PHARE_RECOVERY_AT: ${{ inputs.recovery-at }}
+        PHARE_OPERATION: ${{ inputs.operation }}
+        PHARE_INCIDENT_ID: ${{ inputs.incident-id }}
+        PHARE_INCIDENT_ARTIFACT_PATH: "phare-incident.json"
+      run: |
+        python -m incident_api
+
+    - name: Upload incident artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.incident-artifact-name }}
+        path: "phare-incident.json"
+
+branding:
+  icon: "alert-triangle"
+  color: "blue"
+
