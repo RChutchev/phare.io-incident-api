@@ -57,18 +57,12 @@ outputs:
 runs:
   using: "composite"
   steps:
-    - name: Cache pip
-      id: pip-cache
-      uses: actions/cache@v4
+    - name: Set up uv
+      uses: astral-sh/setup-uv@v7
       with:
-        path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-incident-api-${{ hashFiles('pyproject.toml') }}
+        enable-cache: true
 
-    - name: Install incident-api
-      shell: bash
-      run: pip3 install --quiet .
-
-    - name: Run Phare.io incident operation
+    - name: Install and run Phare.io incident operation
       id: incident
       shell: bash
       env:
@@ -85,7 +79,11 @@ runs:
         PHARE_OPERATION: ${{ inputs.operation }}
         PHARE_INCIDENT_ID: ${{ inputs.incident-id }}
         PHARE_INCIDENT_ARTIFACT_PATH: "phare-incident.json"
-      run: python3 -m incident_api
+      run: |
+        cd "${{ github.action_path }}"
+        uv sync --no-dev
+        uv run python -m incident_api
+        cp phare-incident.json "$GITHUB_WORKSPACE/"
 
     - name: Upload incident artifact
       uses: actions/upload-artifact@v4

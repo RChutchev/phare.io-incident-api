@@ -1,22 +1,27 @@
-[tool.poetry]
+[project]
 name = "incident-api"
 version = "0.1.0"
 description = "GitHub Action helper to manage Phare.io incidents from CI/CD"
-authors = ["Roman Chutchev <RChutchev@gmail.com>"]
+authors = [{ name = "Roman Chutchev", email = "RChutchev@gmail.com" }]
+requires-python = ">=3.12"
+dependencies = [
+    "requests>=2.31.0",
+]
 
-[tool.poetry.dependencies]
-python = "^3.11"
-requests = "^2.31.0"
-
-[tool.poetry.dev-dependencies]
-pytest = "^5.2"
+[dependency-groups]
+dev = [
+    "pytest>=5.2",
+    "pyright",
+]
 
 [build-system]
-requires = ["poetry-core>=1.0.0"]
-build-backend = "poetry.core.masonry.api"
+requires = ["uv-build>=0"]
+build-backend = "uv_build"
 
 [tool.pyright]
-pythonVersion = "3.11"
+pythonVersion = "3.12"
 typeCheckingMode = "basic"
 reportMissingImports = true
 reportMissingTypeStubs = false
+venvPath = "."
+venv = ".venv"

@@ -1,6 +1,6 @@
 ### Phare.io Incident GitHub Action
 
-**Phare.io Incident Action** is a lightweight GitHub Action that talks to the Phare.io Incident API to **create**, **update**, **recover**, and **delete** incidents from your CI/CD pipelines and store the incident details as GitHub Actions artifacts.
+**[RChutchev/phare.io-incident-api](https://github.com/RChutchev/phare.io-incident-api)** — A lightweight GitHub Action that talks to the Phare.io Incident API to **create**, **update**, **recover**, and **delete** incidents from your CI/CD pipelines and store the incident details as GitHub Actions artifacts.
 
 The action uses:
 
@@ -89,7 +89,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Create Phare.io maintenance incident
-        uses: your-org/phare.io-incident-api@v1
+        uses: RChutchev/phare.io-incident-api@v1
         with:
           phare-token: ${{ secrets.PHARE_API_TOKEN }}
           project-id: ${{ secrets.PHARE_PROJECT_ID }} # or use project-slug
@@ -145,7 +145,7 @@ jobs:
     steps:
       - name: Create maintenance incident
         id: create_incident
-        uses: your-org/phare.io-incident-api@v1
+        uses: RChutchev/phare.io-incident-api@v1
         with:
           phare-token: ${{ secrets.PHARE_API_TOKEN }}
           project-id: ${{ secrets.PHARE_PROJECT_ID }}
@@ -153,7 +153,7 @@ jobs:
           # title/description optional; maintenance placeholders used by default
 
       - name: Start deployment (update incident title and description)
-        uses: your-org/phare.io-incident-api@v1
+        uses: RChutchev/phare.io-incident-api@v1
         with:
           phare-token: ${{ secrets.PHARE_API_TOKEN }}
           project-id: ${{ secrets.PHARE_PROJECT_ID }}
@@ -186,7 +186,7 @@ jobs:
     steps:
       - name: Create Phare.io incident
         id: create_incident
-        uses: your-org/phare.io-incident-api@v1
+        uses: RChutchev/phare.io-incident-api@v1
         with:
           phare-token: ${{ secrets.PHARE_API_TOKEN }}
           project-id: ${{ secrets.PHARE_PROJECT_ID }}
@@ -236,7 +236,7 @@ jobs:
 
       - name: Recover incident in Phare.io
         if: steps.incident_meta.outputs.lifecycle_status == 'active'
-        uses: your-org/phare.io-incident-api@v1
+        uses: RChutchev/phare.io-incident-api@v1
         with:
           phare-token: ${{ secrets.PHARE_API_TOKEN }}
           project-id: ${{ secrets.PHARE_PROJECT_ID }}
@@ -265,7 +265,7 @@ jobs:
 
       - name: Delete incident in Phare.io
         if: steps.incident_meta.outputs.lifecycle_status == 'active' || steps.incident_meta.outputs.lifecycle_status == 'recovered'
-        uses: your-org/phare.io-incident-api@v1
+        uses: RChutchev/phare.io-incident-api@v1
         with:
           phare-token: ${{ secrets.PHARE_API_TOKEN }}
           project-id: ${{ secrets.PHARE_PROJECT_ID }}
@@ -285,7 +285,7 @@ For **update** (e.g. during deployment in the same workflow), only run when `lif
 ```yaml
       - name: Update incident during deployment
         if: steps.incident_meta.outputs.lifecycle_status == 'active'
-        uses: your-org/phare.io-incident-api@v1
+        uses: RChutchev/phare.io-incident-api@v1
         with:
           phare-token: ${{ secrets.PHARE_API_TOKEN }}
           project-id: ${{ secrets.PHARE_PROJECT_ID }}
@@ -308,7 +308,7 @@ The `lifecycle_status` field lets you safely reuse the artifact across runs with
 
 ### Development
 
-- **Package layout:** The `incident_api` and `tests` directories, Python treats them as packages. They are required for `python -m incident_api` and for running tests.
-- **Tests:** `pytest` (see `pyproject.toml`). Run with `pytest` or `poetry run pytest`. Tests cover parsing helpers and the create/update/recover/delete API calls via mocked `requests`.
+- **Install & run:** The action and local dev use [uv](https://docs.astral.sh/uv/) (fast Python package installer). Install with `uv sync` (or `uv pip install -e .`). Run the CLI with `uv run python -m incident_api`. For reproducible CI, run `uv lock` and commit `uv.lock`.
+- **Tests:** `pytest` (see `pyproject.toml`). Run with `uv run pytest` or `pytest`. Tests cover parsing helpers and the create/update/recover/delete API calls via mocked `requests`.
 - **Type checking:** Optional [Pyright](https://microsoft.github.io/pyright/) config is in `pyproject.toml` under `[tool.pyright]`. Run with `pyright` if installed.
 
