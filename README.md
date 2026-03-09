@@ -7,7 +7,7 @@ The action uses:
 - **Create**: `POST /uptime/incidents` ([Create an incident](https://docs.phare.io/api-reference/uptime/incidents/create-an-incident)).
 - **Update**: `POST /uptime/incidents/{incidentId}` ([Update an incident](https://docs.phare.io/api-reference/uptime/incidents/update-an-incident)).
 - **Recover**: `POST /uptime/incidents/{incidentId}/recover` ([Recover a incident](https://docs.phare.io/api-reference/uptime/incidents/recover-an-incident)).
- - **Delete**: `DELETE /uptime/incidents/{incidentId}` ([Delete an incident](https://docs.phare.io/api-reference/uptime/incidents/delete-an-incident)).
+- **Delete**: `DELETE /uptime/incidents/{incidentId}` ([Delete an incident](https://docs.phare.io/api-reference/uptime/incidents/delete-an-incident)).
 
 Under the hood, the action:
 
@@ -103,10 +103,7 @@ jobs:
           recovery-at: "1h"
           incident-artifact-name: "phare-incident"
 
-      # your build / deploy steps go here
-      - name: Run tests
-        run: |
-          echo "Run your tests here"
+      # ... your CI/CD steps here ...
 ```
 
 The artifact created by the action (`phare-incident.json`) contains the full Phare.io incident resource as returned by the API (including fields like `id`, `slug`, `state`, `impact`, etc.), matching the `Uptime.Incident.Resource` schema from the [Phare API documentation](https://docs.phare.io/api-reference/uptime/incidents/create-an-incident).
@@ -306,4 +303,12 @@ For **update** (e.g. during deployment in the same workflow), only run when `lif
 - After **delete**: `{ "id": 123, "lifecycle_status": "deleted" }`.
 
 The `lifecycle_status` field lets you safely reuse the artifact across runs without operating on an incident that was already recovered or deleted by a previous pipeline.
+
+---
+
+### Development
+
+- **Package layout:** The `incident_api` and `tests` directories, Python treats them as packages. They are required for `python -m incident_api` and for running tests.
+- **Tests:** `pytest` (see `pyproject.toml`). Run with `pytest` or `poetry run pytest`. Tests cover parsing helpers and the create/update/recover/delete API calls via mocked `requests`.
+- **Type checking:** Optional [Pyright](https://microsoft.github.io/pyright/) config is in `pyproject.toml` under `[tool.pyright]`. Run with `pyright` if installed.
 

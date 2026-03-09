@@ -57,16 +57,16 @@ outputs:
 runs:
   using: "composite"
   steps:
-    - name: Set up Python
-      uses: actions/setup-python@v5
+    - name: Cache pip
+      id: pip-cache
+      uses: actions/cache@v4
       with:
-        python-version: "3.12"
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-incident-api-${{ hashFiles('pyproject.toml') }}
 
-    - name: Install incident-api helper
+    - name: Install incident-api
       shell: bash
-      run: |
-        python -m pip install --upgrade pip
-        pip install .
+      run: pip3 install --quiet .
 
     - name: Run Phare.io incident operation
       id: incident
@@ -85,8 +85,7 @@ runs:
         PHARE_OPERATION: ${{ inputs.operation }}
         PHARE_INCIDENT_ID: ${{ inputs.incident-id }}
         PHARE_INCIDENT_ARTIFACT_PATH: "phare-incident.json"
-      run: |
-        python -m incident_api
+      run: python3 -m incident_api
 
     - name: Upload incident artifact
       uses: actions/upload-artifact@v4
