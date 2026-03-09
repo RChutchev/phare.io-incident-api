@@ -351,4 +351,3 @@ def delete_incident(
         except ValueError:
             error_text = response.text
         raise IncidentApiError(f"{message}\nResponse body:\n{error_text}")
-

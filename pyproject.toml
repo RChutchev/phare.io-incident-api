@@ -15,7 +15,7 @@ dev = [
 ]
 
 [build-system]
-requires = ["uv-build>=0"]
+requires = ["uv-build>=0,<0.2"]
 build-backend = "uv_build"
 
 [tool.pyright]

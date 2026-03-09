@@ -308,6 +308,7 @@ The `lifecycle_status` field lets you safely reuse the artifact across runs with
 
 ### Development
 
+- **Package layout:** The package uses the [src layout](https://packaging.python.org/en/latest/discussions/src-layout-vs-flat-layout/) (`src/incident_api/`). Tests import the installed `incident_api` package.
 - **Install & run:** The action and local dev use [uv](https://docs.astral.sh/uv/) (fast Python package installer). Install with `uv sync` (or `uv pip install -e .`). Run the CLI with `uv run python -m incident_api`. For reproducible CI, run `uv lock` and commit `uv.lock`.
 - **Tests:** `pytest` (see `pyproject.toml`). Run with `uv run pytest` or `pytest`. Tests cover parsing helpers and the create/update/recover/delete API calls via mocked `requests`.
 - **Type checking:** Optional [Pyright](https://microsoft.github.io/pyright/) config is in `pyproject.toml` under `[tool.pyright]`. Run with `pyright` if installed.
