@@ -23,16 +23,16 @@ Under the hood, the action:
 
 - **`phare-token`** (required): Phare.io API token.
   - **Best practice**: always pass this from a GitHub Secret, for example `secrets.PHARE_API_TOKEN`.
-- **`project-id`** (optional): Sent as `X-Phare-Project-Id` header.
-- **`project-slug`** (optional): Sent as `X-Phare-Project-Slug` header.
+- **`project-id`** (optional): Sent as `X-Phare-Project-Id` header. Use **either** project-id or project-slug when using an organization-scoped API key (see [Where to get project ID and slug](#where-to-get-project-id-and-monitor-ids)).
+- **`project-slug`** (optional): Sent as `X-Phare-Project-Slug` header. The project’s name/slug; you can use **either** project-id or project-slug.
 - **`impact`** (optional): Incident impact, default is `maintenance`.
   - Allowed values: `unknown`, `operational`, `degraded_performance`, `partial_outage`, `major_outage`, `maintenance`. These match the `Uptime.Incident.ImpactEnum` enum in the Phare API.
 - **`title`** (optional): Incident title. For `operation: create`, if omitted a maintenance placeholder like `"Maintenance window"` is used.
 - **`description`** (optional): Incident description. For `operation: create`, if omitted a maintenance placeholder like `"Automatic maintenance incident created by CI/CD pipeline."` is used.
 - **`exclude-from-downtime`** (optional): Whether to exclude from downtime calculations (`true` / `false` / `1` / `0` / `yes` / `no`).
 - **`monitors`** (optional): Comma-separated list of monitor IDs, e.g. `"1,2,3"`. Each ID is sent as an integer in the `monitors` array.
-- **`incident-at`** (optional): Incident confirmation time (for create or update).
-- **`recovery-at`** (optional): Incident recovery time (for create or update).
+- **`incident-at`** (optional): Incident confirmation time (for create or update). Supports relative offsets like `0s`, `9m`, `-10m`, `-1h`, `-1d`. Keep future times within 9 minutes (see [Datetime format](#datetime-input-format-incident-at-recovery-at)).
+- **`recovery-at`** (optional): Incident recovery time (for create or update). Same format as `incident-at`; keep within 9 minutes in the future if set. If set, the incident can be created or shown as resolved at that time; omit to keep it ongoing and recover/delete later in the workflow.
 - **`incident-id`** (optional): ID of the incident to **update**, **recover**, or **delete**. Required for `operation: update`, `operation: recover`, and `operation: delete`.
 - **`operation`** (optional): Operation to perform: `create`, `update`, `recover`, or `delete`.
 - **`incident-artifact-name`** (optional): Name of the GitHub Actions artifact that will contain the created incident JSON. Defaults to `phare-incident`.
@@ -43,19 +43,12 @@ Under the hood, the action:
 
 Both `incident-at` and `recovery-at` accept:
 
-- **Absolute datetime**: ISO 8601 string, for example:
-  - `2026-03-08T10:00:00Z`
-  - `2026-03-08T10:00:00+00:00`
+- **Absolute datetime**: ISO 8601 string, e.g. `2026-03-08T10:00:00+00:00` or `2026-03-08T10:00:00Z`.
 - **Relative offset from current time (UTC)**:
-  - `10s` → current time + 10 seconds
-  - `10m` → current time + 10 minutes
-  - `1h` → current time + 1 hour
-  - `10h` → current time + 10 hours
-  - `1d` → current time + 1 day
+  - **After now:** `10s`, `5m`, `9m` → current time + that amount. The Phare API only accepts times within about **9–10 minutes** from server time; the action uses a safe **9 minute** limit. Do not use future offsets beyond 9 minutes (e.g. avoid `1h`, `1d` for future times) or the server will return an error.
+  - **Before now:** `-10s`, `-10m`, `-1h`, `-1d` → current time minus that amount (any past time is allowed).
 
-The action normalizes all datetime values to UTC and sends them to Phare.io in ISO 8601 format with a `Z` suffix (for example `2026-03-08T10:00:00Z`), matching the `date-time` format expected by the Phare API as described in the [Create an incident](https://docs.phare.io/api-reference/uptime/incidents/create-an-incident) documentation.
-
-If a datetime value is invalid, the action fails fast with a clear error message instead of sending bad data to the API.
+The action sends datetimes in UTC with `+00:00` (e.g. `2026-03-08T10:00:00+00:00`), matching the format required by the [Phare API](https://docs.phare.io/api-reference/uptime/incidents/create-an-incident). Invalid values cause the action to fail with a clear error.
 
 ---
 
@@ -69,13 +62,49 @@ If a datetime value is invalid, the action fails fast with a clear error message
 
 ---
 
+### Where to get project ID and monitor IDs
+
+- **Project ID (X-Phare-Project-Id)** and **Project slug (X-Phare-Project-Slug):** You can use **either** the numeric ID or the project name (slug). From the Phare web app: project ID is in the URL when editing a project, e.g. `https://app.phare.io/organization/projects/35866/edit` → **35866**. The slug is the project name (e.g. from the same page or API). You can also get both via the [Phare API](https://docs.phare.io/).
+- **Monitor IDs:** From the monitor page URL, e.g. `https://app.phare.io/uptime/monitors/23176` → **23176**. You can also obtain them via the Phare API. Pass as a comma-separated list in the `monitors` input (e.g. `"23176,23177"`).
+
+---
+
+### Minimum example: create and recover (no optional fields)
+
+Only required inputs: **phare-token** and, when using an organization-scoped key, **project-id** or **project-slug**. For recover you also need **incident-id** (e.g. from the create step output).
+
+```yaml
+name: Minimal create and recover
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  incident:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create incident
+        id: create
+        uses: RChutchev/phare.io-incident-api@v1
+        with:
+          phare-token: ${{ secrets.PHARE_API_TOKEN }}
+          project-slug: ${{ secrets.PHARE_PROJECT_SLUG }}
+
+      - name: Recover incident
+        uses: RChutchev/phare.io-incident-api@v1
+        with:
+          phare-token: ${{ secrets.PHARE_API_TOKEN }}
+          project-slug: ${{ secrets.PHARE_PROJECT_SLUG }}
+          operation: recover
+          incident-id: ${{ steps.create.outputs.incident-id }}
+```
+
+---
+
 ### Example 1: Create a maintenance incident at the start of CI/CD
 
-This example shows a typical CI/CD use case:
-
-- At the very start of the pipeline, the workflow creates a **maintenance incident** in Phare.io.
-- The incident is scheduled to **start immediately** and to **recover 1 hour later**.
-- The full incident payload is stored as an artifact named `phare-incident`, which can be downloaded and used by later jobs or workflows (see [GitHub artifact docs](https://docs.github.com/en/actions/tutorials/store-and-share-data)).
+This example creates a **maintenance incident** at the start of the pipeline and stores the incident as an artifact. It does **not** set `recovery-at`, so the incident stays ongoing until you call **recover** or **delete** later.
 
 ```yaml
 name: Deploy with Phare.io maintenance
@@ -92,19 +121,19 @@ jobs:
         uses: RChutchev/phare.io-incident-api@v1
         with:
           phare-token: ${{ secrets.PHARE_API_TOKEN }}
-          project-id: ${{ secrets.PHARE_PROJECT_ID }} # or use project-slug
+          project-id: ${{ secrets.PHARE_PROJECT_ID }}
           impact: maintenance
           title: "Scheduled deployment"
           description: "CI/CD deployment from GitHub Actions."
           exclude-from-downtime: true
-          monitors: "1,2,3"
-          # start incident now, mark recovery 1 hour later
+          monitors: "23176,23177"
           incident-at: "0s"
-          recovery-at: "1h"
           incident-artifact-name: "phare-incident"
 
       # ... your CI/CD steps here ...
 ```
+
+**Optional:** You can set `recovery-at` (e.g. `recovery-at: "9m"` to schedule recovery 9 minutes from now). If you set it, the incident may be created or shown as resolved at that time; omit it if you want to recover or delete the incident yourself later in the workflow.
 
 The artifact created by the action (`phare-incident.json`) contains the full Phare.io incident resource as returned by the API (including fields like `id`, `slug`, `state`, `impact`, etc.), matching the `Uptime.Incident.Resource` schema from the [Phare API documentation](https://docs.phare.io/api-reference/uptime/incidents/create-an-incident).
 

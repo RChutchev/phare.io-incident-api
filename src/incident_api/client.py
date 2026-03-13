@@ -53,9 +53,15 @@ def parse_monitors(value: Optional[str]) -> Optional[List[int]]:
 
 
 def _format_datetime(dt: datetime) -> str:
-    """Return an RFC 3339 / ISO 8601 string in UTC with Z suffix."""
+    """Return an RFC 3339 / ISO 8601 string in UTC (e.g. 2026-03-10T00:10:46+00:00).
+    Phare API expects Y-m-d\\TH:i:sp format with explicit timezone (+00:00), not Z."""
     dt_utc = dt.astimezone(timezone.utc)
-    return dt_utc.isoformat().replace("+00:00", "Z")
+    s = dt_utc.isoformat()
+    return s if s.endswith("+00:00") else s.replace("Z", "+00:00")
+
+
+# Phare API allows incident_at/recovery_at at most 9 minutes in the future.
+MAX_FUTURE_MINUTES = 9
 
 
 def parse_datetime_input(
@@ -66,10 +72,11 @@ def parse_datetime_input(
     """
     Parse a datetime input which can be:
 
-    - An ISO 8601 datetime (e.g. 2026-03-08T12:00:00Z)
-    - A relative offset like '10s', '10m', '1h', '10h', '1d'
+    - An ISO 8601 datetime (e.g. 2026-03-08T12:00:00+00:00)
+    - A relative offset: '10s', '10m', '1h', '1d' (after now) or '-10m', '-1h', '-1d' (before now)
 
-    Returns an ISO 8601 string in UTC with Z suffix, or None.
+    Future times are capped to now + 9 minutes to comply with Phare API rules.
+    Returns an ISO 8601 string in UTC with +00:00, or None.
     """
     if value is None:
         return None
@@ -78,41 +85,59 @@ def parse_datetime_input(
     if not text:
         return None
 
-    # Relative offsets: <integer><unit>, where unit in {s, m, h, d}
-    if text[-1] in {"s", "m", "h", "d"} and text[:-1].isdigit():
-        amount = int(text[:-1])
-        unit = text[-1]
+    # Relative offsets: optional leading minus, then <integer><unit>, unit in {s, m, h, d}
+    if text[-1] in {"s", "m", "h", "d"}:
+        rest = text[:-1]
+        negative = rest.startswith("-")
+        if negative:
+            rest = rest[1:]
+        if rest.isdigit():
+            amount = int(rest)
+            unit = text[-1]
 
-        if now is None:
-            now = datetime.now(timezone.utc)
+            if now is None:
+                now = datetime.now(timezone.utc)
 
-        if unit == "s":
-            delta = timedelta(seconds=amount)
-        elif unit == "m":
-            delta = timedelta(minutes=amount)
-        elif unit == "h":
-            delta = timedelta(hours=amount)
-        else:  # unit == "d"
-            delta = timedelta(days=amount)
+            if unit == "s":
+                delta = timedelta(seconds=amount)
+            elif unit == "m":
+                delta = timedelta(minutes=amount)
+            elif unit == "h":
+                delta = timedelta(hours=amount)
+            else:  # unit == "d"
+                delta = timedelta(days=amount)
 
-        return _format_datetime(now + delta)
+            if negative:
+                dt = now - delta
+            else:
+                dt = now + delta
+                # Phare allows at most 9 minutes in the future; cap to comply
+                max_future = now + timedelta(minutes=MAX_FUTURE_MINUTES)
+                if dt > max_future:
+                    dt = max_future
+
+            return _format_datetime(dt)
 
     # Absolute datetime string
     try:
         normalized = text
         if text.endswith("Z"):
-            # Python's fromisoformat does not understand 'Z'
             normalized = text[:-1] + "+00:00"
         dt = datetime.fromisoformat(normalized)
         if dt.tzinfo is None:
-            # Assume UTC if no timezone is provided
             dt = dt.replace(tzinfo=timezone.utc)
+        # Cap absolute future times to now + 9 minutes
+        if now is None:
+            now = datetime.now(timezone.utc)
+        max_future = now + timedelta(minutes=MAX_FUTURE_MINUTES)
+        if dt > max_future:
+            dt = max_future
         return _format_datetime(dt)
     except ValueError as exc:
         raise ValueError(
             "Invalid datetime value "
-            f"'{value}'. Use ISO 8601 (e.g. 2026-03-08T12:00:00Z) "
-            "or a relative offset like '10s', '10m', '1h', '1d'."
+            f"'{value}'. Use ISO 8601 (e.g. 2026-03-08T12:00:00+00:00) "
+            "or a relative offset like '10m', '1h', '-10m', '-1d'."
         ) from exc
 
 
