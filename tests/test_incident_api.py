@@ -52,36 +52,36 @@ def test_parse_datetime_input_offset_minutes():
     base = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
     result = parse_datetime_input("10m", now=base)
     # 10m in future is capped to 9 min by Phare API rule
-    assert result == "2026-01-01T12:09:00+00:00"
+    assert result == "2026-01-01T12:09:00Z"
 
 
 def test_parse_datetime_input_iso_string_with_z():
     result = parse_datetime_input("2026-03-08T10:00:00Z")
-    assert result == "2026-03-08T10:00:00+00:00"
+    assert result == "2026-03-08T10:00:00Z"
 
 
 def test_parse_datetime_input_offset_seconds():
     base = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
-    assert parse_datetime_input("30s", now=base) == "2026-01-01T12:00:30+00:00"
+    assert parse_datetime_input("30s", now=base) == "2026-01-01T12:00:30Z"
 
 
 def test_parse_datetime_input_negative_offset():
     base = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
-    assert parse_datetime_input("-10m", now=base) == "2026-01-01T11:50:00+00:00"
-    assert parse_datetime_input("-1h", now=base) == "2026-01-01T11:00:00+00:00"
+    assert parse_datetime_input("-10m", now=base) == "2026-01-01T11:50:00Z"
+    assert parse_datetime_input("-1h", now=base) == "2026-01-01T11:00:00Z"
 
 
 def test_parse_datetime_input_future_capped_at_9_minutes():
     base = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
     # 1h in future should be capped to now + 9 min
     result = parse_datetime_input("1h", now=base)
-    assert result == "2026-01-01T12:09:00+00:00"
+    assert result == "2026-01-01T12:09:00Z"
 
 
 def test_format_datetime_strips_microseconds_for_phare():
-    """Phare expects Y-m-dTH:i:s+P without fractional seconds."""
+    """Phare expects UTC datetimes like published_at: 2023-11-07T05:31:56Z."""
     dt = datetime(2026, 1, 1, 12, 1, 2, 123456, tzinfo=timezone.utc)
-    assert _format_datetime(dt) == "2026-01-01T12:01:02+00:00"
+    assert _format_datetime(dt) == "2026-01-01T12:01:02Z"
 
 
 # --- API actions (mocked requests) ---

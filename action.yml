@@ -35,10 +35,28 @@ inputs:
     description: "Incident recovery time. Either ISO 8601 (e.g. 2026-03-08T12:10:00Z) or an offset like 10s, 10m, 1h, 10h, 1d."
     required: false
   incident-id:
-    description: "Incident ID to update, recover, or delete. Required for operations 'update', 'recover', and 'delete'."
+    description: "Incident ID (for update/recover/delete incident, or for all incident-update operations)."
+    required: false
+  incident-update-id:
+    description: "Incident update ID for get/update/delete incident-update operations."
+    required: false
+  update-state:
+    description: "State for create/update incident update: unknown, investigating, identified, monitoring, resolved."
+    required: false
+  update-content:
+    description: "Content text for create/update incident update."
+    required: false
+  update-published-at:
+    description: "Optional published_at for incident update (ISO 8601 with Z or relative offset like 1m, -10m)."
+    required: false
+  page:
+    description: "Page number for list-incident-updates (default 1)."
+    required: false
+  per-page:
+    description: "Per page for list-incident-updates (default 20, max 100)."
     required: false
   operation:
-    description: "Operation to perform: `create`, `update`, `recover`, or `delete`."
+    description: "Operation: create, update, recover, delete, list-incident-updates, get-incident-update, create-incident-update, update-incident-update, delete-incident-update."
     required: false
     default: "create"
   incident-artifact-name:
@@ -50,6 +68,9 @@ outputs:
   incident-id:
     description: "ID of the incident affected by the operation (created, updated, or recovered)."
     value: ${{ steps.incident.outputs.incident_id }}
+  incident-update-id:
+    description: "ID of the incident update (get/create/update incident-update operations)."
+    value: ${{ steps.incident.outputs.incident_update_id }}
   incident-artifact-path:
     description: "Path of the JSON file containing the created incident payload."
     value: "phare-incident.json"
@@ -78,6 +99,12 @@ runs:
         PHARE_RECOVERY_AT: ${{ inputs.recovery-at }}
         PHARE_OPERATION: ${{ inputs.operation }}
         PHARE_INCIDENT_ID: ${{ inputs.incident-id }}
+        PHARE_INCIDENT_UPDATE_ID: ${{ inputs.incident-update-id }}
+        PHARE_UPDATE_STATE: ${{ inputs.update-state }}
+        PHARE_UPDATE_CONTENT: ${{ inputs.update-content }}
+        PHARE_UPDATE_PUBLISHED_AT: ${{ inputs.update-published-at }}
+        PHARE_PAGE: ${{ inputs.page }}
+        PHARE_PER_PAGE: ${{ inputs.per-page }}
         PHARE_INCIDENT_ARTIFACT_PATH: "phare-incident.json"
       run: |
         cd "${{ github.action_path }}"

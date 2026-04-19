@@ -53,13 +53,13 @@ def parse_monitors(value: Optional[str]) -> Optional[List[int]]:
 
 
 def _format_datetime(dt: datetime) -> str:
-    """Return UTC datetime matching Phare's Y-m-d\\TH:i:sP style (no fractional seconds).
+    """Return UTC datetime as Phare expects, e.g. 2023-11-07T05:31:56Z (no fractional seconds).
 
-    Python's isoformat() can emit microseconds (e.g. .123456+00:00), which fails
-    Laravel-style validation for Y-m-d\\TH:i:sP.
+    The API validates incident_at / recovery_at / published_at like published_at in their docs.
+    Use Z suffix, not +00:00 — +00:00 was rejected with Y-m-d\\TH:i:sp validation errors.
     """
     dt_utc = dt.astimezone(timezone.utc).replace(microsecond=0)
-    return dt_utc.strftime("%Y-%m-%dT%H:%M:%S+00:00")
+    return dt_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 # Phare API allows incident_at/recovery_at at most 9 minutes in the future.
@@ -78,7 +78,7 @@ def parse_datetime_input(
     - A relative offset: '10s', '10m', '1h', '1d' (after now) or '-10m', '-1h', '-1d' (before now)
 
     Future times are capped to now + 9 minutes to comply with Phare API rules.
-    Returns an ISO 8601 string in UTC with +00:00, or None.
+    Returns an ISO 8601 string in UTC with Z suffix (e.g. 2023-11-07T05:31:56Z), or None.
     """
     if value is None:
         return None
@@ -138,7 +138,7 @@ def parse_datetime_input(
     except ValueError as exc:
         raise ValueError(
             "Invalid datetime value "
-            f"'{value}'. Use ISO 8601 (e.g. 2026-03-08T12:00:00+00:00) "
+            f"'{value}'. Use ISO 8601 (e.g. 2026-03-08T12:00:00Z) "
             "or a relative offset like '10m', '1h', '-10m', '-1d'."
         ) from exc
 
@@ -372,6 +372,215 @@ def delete_incident(
             f"Failed to delete incident {incident_id} "
             f"(status {response.status_code})."
         )
+        try:
+            data = response.json()
+            error_text = json.dumps(data, indent=2)
+        except ValueError:
+            error_text = response.text
+        raise IncidentApiError(f"{message}\nResponse body:\n{error_text}")
+
+
+# --- Incident updates (sub-resource under /uptime/incidents/{id}/updates) ---
+
+INCIDENT_UPDATE_STATE_VALUES = {
+    "unknown",
+    "investigating",
+    "identified",
+    "monitoring",
+    "resolved",
+}
+
+
+def _headers_with_auth(
+    token: Optional[str],
+    project_id: Optional[str],
+    project_slug: Optional[str],
+    *,
+    json_body: bool = False,
+) -> Dict[str, str]:
+    if not token:
+        raise IncidentApiError(
+            "Missing Phare.io token. Provide it via the PHARE_TOKEN environment variable."
+        )
+    headers: Dict[str, str] = {"Authorization": f"Bearer {token}"}
+    if json_body:
+        headers["Content-Type"] = "application/json"
+    if project_id:
+        headers["X-Phare-Project-Id"] = str(project_id)
+    if project_slug:
+        headers["X-Phare-Project-Slug"] = project_slug
+    return headers
+
+
+def list_incident_updates(
+    *,
+    token: Optional[str],
+    project_id: Optional[str],
+    project_slug: Optional[str],
+    incident_id: int,
+    page: int = 1,
+    per_page: int = 20,
+    timeout: int = 10,
+) -> Dict[str, Any]:
+    """GET /uptime/incidents/{incidentId}/updates"""
+    if incident_id <= 0:
+        raise IncidentApiError("incident_id must be a positive integer.")
+
+    headers = _headers_with_auth(token, project_id, project_slug)
+    url = f"{PHARE_API_BASE_URL}/uptime/incidents/{incident_id}/updates"
+    params = {"page": page, "per_page": per_page}
+    response = requests.get(url, headers=headers, params=params, timeout=timeout)
+    if response.status_code != 200:
+        message = f"Failed to list incident updates (status {response.status_code})."
+        try:
+            data = response.json()
+            error_text = json.dumps(data, indent=2)
+        except ValueError:
+            error_text = response.text
+        raise IncidentApiError(f"{message}\nResponse body:\n{error_text}")
+    return response.json()
+
+
+def get_incident_update(
+    *,
+    token: Optional[str],
+    project_id: Optional[str],
+    project_slug: Optional[str],
+    incident_id: int,
+    incident_update_id: int,
+    timeout: int = 10,
+) -> Dict[str, Any]:
+    """GET /uptime/incidents/{incidentId}/updates/{incidentUpdateId}"""
+    if incident_id <= 0 or incident_update_id <= 0:
+        raise IncidentApiError(
+            "incident_id and incident_update_id must be positive integers."
+        )
+
+    headers = _headers_with_auth(token, project_id, project_slug)
+    url = (
+        f"{PHARE_API_BASE_URL}/uptime/incidents/{incident_id}/updates/"
+        f"{incident_update_id}"
+    )
+    response = requests.get(url, headers=headers, timeout=timeout)
+    if response.status_code != 200:
+        message = f"Failed to get incident update (status {response.status_code})."
+        try:
+            data = response.json()
+            error_text = json.dumps(data, indent=2)
+        except ValueError:
+            error_text = response.text
+        raise IncidentApiError(f"{message}\nResponse body:\n{error_text}")
+    return response.json()
+
+
+def create_incident_update(
+    *,
+    token: Optional[str],
+    project_id: Optional[str],
+    project_slug: Optional[str],
+    incident_id: int,
+    state: str,
+    content: str,
+    published_at: Optional[str] = None,
+    timeout: int = 10,
+) -> Dict[str, Any]:
+    """POST /uptime/incidents/{incidentId}/updates"""
+    if incident_id <= 0:
+        raise IncidentApiError("incident_id must be a positive integer.")
+    if state not in INCIDENT_UPDATE_STATE_VALUES:
+        allowed = ", ".join(sorted(INCIDENT_UPDATE_STATE_VALUES))
+        raise IncidentApiError(f"Invalid update state '{state}'. Allowed: {allowed}.")
+
+    body: Dict[str, Any] = {"state": state, "content": content}
+    if published_at is not None:
+        body["published_at"] = published_at
+
+    headers = _headers_with_auth(token, project_id, project_slug, json_body=True)
+    url = f"{PHARE_API_BASE_URL}/uptime/incidents/{incident_id}/updates"
+    response = requests.post(url, headers=headers, json=body, timeout=timeout)
+    if response.status_code != 201:
+        message = f"Failed to create incident update (status {response.status_code})."
+        try:
+            data = response.json()
+            error_text = json.dumps(data, indent=2)
+        except ValueError:
+            error_text = response.text
+        raise IncidentApiError(f"{message}\nResponse body:\n{error_text}")
+    return response.json()
+
+
+def update_incident_update(
+    *,
+    token: Optional[str],
+    project_id: Optional[str],
+    project_slug: Optional[str],
+    incident_id: int,
+    incident_update_id: int,
+    state: Optional[str] = None,
+    content: Optional[str] = None,
+    published_at: Optional[str] = None,
+    timeout: int = 10,
+) -> Dict[str, Any]:
+    """POST /uptime/incidents/{incidentId}/updates/{incidentUpdateId}"""
+    if incident_id <= 0 or incident_update_id <= 0:
+        raise IncidentApiError(
+            "incident_id and incident_update_id must be positive integers."
+        )
+    if state is not None and state not in INCIDENT_UPDATE_STATE_VALUES:
+        allowed = ", ".join(sorted(INCIDENT_UPDATE_STATE_VALUES))
+        raise IncidentApiError(f"Invalid update state '{state}'. Allowed: {allowed}.")
+
+    payload: Dict[str, Any] = {
+        "state": state,
+        "content": content,
+        "published_at": published_at,
+    }
+    body = {k: v for k, v in payload.items() if v is not None}
+    if not body:
+        raise IncidentApiError(
+            "At least one of state, content, or published_at must be set."
+        )
+
+    headers = _headers_with_auth(token, project_id, project_slug, json_body=True)
+    url = (
+        f"{PHARE_API_BASE_URL}/uptime/incidents/{incident_id}/updates/"
+        f"{incident_update_id}"
+    )
+    response = requests.post(url, headers=headers, json=body, timeout=timeout)
+    if response.status_code != 200:
+        message = f"Failed to update incident update (status {response.status_code})."
+        try:
+            data = response.json()
+            error_text = json.dumps(data, indent=2)
+        except ValueError:
+            error_text = response.text
+        raise IncidentApiError(f"{message}\nResponse body:\n{error_text}")
+    return response.json()
+
+
+def delete_incident_update(
+    *,
+    token: Optional[str],
+    project_id: Optional[str],
+    project_slug: Optional[str],
+    incident_id: int,
+    incident_update_id: int,
+    timeout: int = 10,
+) -> None:
+    """DELETE /uptime/incidents/{incidentId}/updates/{incidentUpdateId}"""
+    if incident_id <= 0 or incident_update_id <= 0:
+        raise IncidentApiError(
+            "incident_id and incident_update_id must be positive integers."
+        )
+
+    headers = _headers_with_auth(token, project_id, project_slug)
+    url = (
+        f"{PHARE_API_BASE_URL}/uptime/incidents/{incident_id}/updates/"
+        f"{incident_update_id}"
+    )
+    response = requests.delete(url, headers=headers, timeout=timeout)
+    if response.status_code != 204:
+        message = f"Failed to delete incident update (status {response.status_code})."
         try:
             data = response.json()
             error_text = json.dumps(data, indent=2)

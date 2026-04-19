@@ -9,6 +9,10 @@ The action uses:
 - **Recover**: `POST /uptime/incidents/{incidentId}/recover` ([Recover a incident](https://docs.phare.io/api-reference/uptime/incidents/recover-an-incident)).
 - **Delete**: `DELETE /uptime/incidents/{incidentId}` ([Delete an incident](https://docs.phare.io/api-reference/uptime/incidents/delete-an-incident)).
 
+**Incident updates** (optional `operation` values):
+
+- [List incident updates](https://docs.phare.io/api-reference/uptime/incidents/updates/list-incident-updates) · [Get an incident update](https://docs.phare.io/api-reference/uptime/incidents/updates/get-an-incident-update) · [Create an incident update](https://docs.phare.io/api-reference/uptime/incidents/updates/create-an-incident-update) · [Update an incident update](https://docs.phare.io/api-reference/uptime/incidents/updates/update-an-incident-update) · [Delete an incident update](https://docs.phare.io/api-reference/uptime/incidents/updates/delete-an-incident-update)
+
 Under the hood, the action:
 
 - **Calls** the Phare.io API over HTTPS with your token and optional project headers.
@@ -33,9 +37,12 @@ Under the hood, the action:
 - **`monitors`** (optional): Comma-separated list of monitor IDs, e.g. `"1,2,3"`. Each ID is sent as an integer in the `monitors` array.
 - **`incident-at`** (optional): Incident confirmation time (for create or update). Supports relative offsets like `0s`, `9m`, `-10m`, `-1h`, `-1d`. Keep future times within 9 minutes (see [Datetime format](#datetime-input-format-incident-at-recovery-at)).
 - **`recovery-at`** (optional): Incident recovery time (for create or update). Same format as `incident-at`; keep within 9 minutes in the future if set. If set, the incident can be created or shown as resolved at that time; omit to keep it ongoing and recover/delete later in the workflow.
-- **`incident-id`** (optional): ID of the incident to **update**, **recover**, or **delete**. Required for `operation: update`, `operation: recover`, and `operation: delete`.
-- **`operation`** (optional): Operation to perform: `create`, `update`, `recover`, or `delete`.
-- **`incident-artifact-name`** (optional): Name of the GitHub Actions artifact that will contain the created incident JSON. Defaults to `phare-incident`.
+- **`incident-id`** (optional): Incident ID for update/recover/delete incident, or for all **incident update** operations (`list-incident-updates`, `get-incident-update`, etc.).
+- **`incident-update-id`** (optional): Required for `get-incident-update`, `update-incident-update`, `delete-incident-update`.
+- **`update-state`**, **`update-content`**, **`update-published-at`**: Used for `create-incident-update` / `update-incident-update` (state: `unknown`, `investigating`, `identified`, `monitoring`, `resolved`). `published-at` uses the same datetime rules as `incident-at`.
+- **`page`**, **`per-page`**: Pagination for `list-incident-updates` (defaults 1 and 20).
+- **`operation`** (optional): `create`, `update`, `recover`, `delete`, or incident-update operations: `list-incident-updates`, `get-incident-update`, `create-incident-update`, `update-incident-update`, `delete-incident-update`.
+- **`incident-artifact-name`** (optional): Artifact name for `phare-incident.json`. Defaults to `phare-incident`.
 
 ---
 
@@ -43,12 +50,12 @@ Under the hood, the action:
 
 Both `incident-at` and `recovery-at` accept:
 
-- **Absolute datetime**: ISO 8601 string, e.g. `2026-03-08T10:00:00+00:00` or `2026-03-08T10:00:00Z`.
+- **Absolute datetime**: ISO 8601 in UTC, e.g. `2023-11-07T05:31:56Z` (same style as `published_at` in the Phare docs). The action sends **UTC with a `Z` suffix**, not `+00:00`—that matches what the API accepts for `incident_at`, `recovery_at`, and `published_at`.
 - **Relative offset from current time (UTC)**:
   - **After now:** `10s`, `5m`, `9m` → current time + that amount. The Phare API only accepts times within about **9–10 minutes** from server time; the action uses a safe **9 minute** limit. Do not use future offsets beyond 9 minutes (e.g. avoid `1h`, `1d` for future times) or the server will return an error.
   - **Before now:** `-10s`, `-10m`, `-1h`, `-1d` → current time minus that amount (any past time is allowed).
 
-The action sends datetimes in UTC with `+00:00` (e.g. `2026-03-08T10:00:00+00:00`), matching the format required by the [Phare API](https://docs.phare.io/api-reference/uptime/incidents/create-an-incident). Invalid values cause the action to fail with a clear error.
+Invalid values cause the action to fail with a clear error.
 
 ---
 
