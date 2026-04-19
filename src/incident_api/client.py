@@ -53,11 +53,13 @@ def parse_monitors(value: Optional[str]) -> Optional[List[int]]:
 
 
 def _format_datetime(dt: datetime) -> str:
-    """Return an RFC 3339 / ISO 8601 string in UTC (e.g. 2026-03-10T00:10:46+00:00).
-    Phare API expects Y-m-d\\TH:i:sp format with explicit timezone (+00:00), not Z."""
-    dt_utc = dt.astimezone(timezone.utc)
-    s = dt_utc.isoformat()
-    return s if s.endswith("+00:00") else s.replace("Z", "+00:00")
+    """Return UTC datetime matching Phare's Y-m-d\\TH:i:sP style (no fractional seconds).
+
+    Python's isoformat() can emit microseconds (e.g. .123456+00:00), which fails
+    Laravel-style validation for Y-m-d\\TH:i:sP.
+    """
+    dt_utc = dt.astimezone(timezone.utc).replace(microsecond=0)
+    return dt_utc.strftime("%Y-%m-%dT%H:%M:%S+00:00")
 
 
 # Phare API allows incident_at/recovery_at at most 9 minutes in the future.

@@ -6,6 +6,7 @@ import pytest
 from incident_api import __version__
 from incident_api.client import (
     IncidentApiError,
+    _format_datetime,
     create_incident,
     delete_incident,
     parse_bool,
@@ -75,6 +76,12 @@ def test_parse_datetime_input_future_capped_at_9_minutes():
     # 1h in future should be capped to now + 9 min
     result = parse_datetime_input("1h", now=base)
     assert result == "2026-01-01T12:09:00+00:00"
+
+
+def test_format_datetime_strips_microseconds_for_phare():
+    """Phare expects Y-m-dTH:i:s+P without fractional seconds."""
+    dt = datetime(2026, 1, 1, 12, 1, 2, 123456, tzinfo=timezone.utc)
+    assert _format_datetime(dt) == "2026-01-01T12:01:02+00:00"
 
 
 # --- API actions (mocked requests) ---
